@@ -10,9 +10,9 @@ The project has the following structure:
 
 -   Code: All code written for this project
 
--   Documents: All code written for this project
+-   Data: All data for this project
 
--   Figures: Any figures that were not generated from the provided code
+    -   budburst_observations_1733415315.csv: phenology data from <https://budburst.org/> for *Populus tremuloides* downloaded on December 5, 2024
 
 -   .gitignore
 
