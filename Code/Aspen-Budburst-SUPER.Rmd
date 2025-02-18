@@ -1,0 +1,325 @@
+---
+output:
+  bookdown::word_document2:
+    reference_docx: Template.docx
+    fig_caption: yes
+    toc: no
+    number_sections: no
+    df_print: kable
+editor_options: 
+  chunk_output_type: inline
+bibliography: references.bib
+link-citations: true
+urlcolor: blue
+linkcolor: blue
+citationcolor: blue
+csl: "`r here:::here('ecology.csl')`"
+---
+
+```{r setup, include=FALSE}
+
+### This chunk of code sets up R to 
+
+## Set options for downloading 
+options(repos = c(CRAN = "http://cran.rstudio.com"))
+options(timeout=60*30) #timeout downloads that last longer than 30 minutes
+
+knitr::opts_chunk$set(
+  echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	progress = FALSE,
+	cache = FALSE,
+	dpi = 300,
+  fig.align = 'center'
+)
+
+# Load or install and load libraries
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  knitr, # markdown documents
+  flextable, # plot tables
+  bookdown, # figure numbering in markdown
+  here, # easy file structure
+  tidyverse, # data manipulation
+  lubridate, # time
+  readxl, # read excel files
+  ggplot2, # figures
+  patchwork, # multiple figures
+  sf, # spatial data
+  terra, # raster data (new pkg)
+  prism, # prism data
+  parallel # parallel processing
+) 
+terraOptions(progress=0) # suppress all progress bars in terra
+cores <- parallel::detectCores() # Set number of cores for parallel processing
+
+# Set custom plotting theme
+theme_new <- function(base_size = 9,base_family = "Helvetica"){
+  theme_classic(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      axis.line.x = element_line(color="black", linewidth = 0.25),
+      axis.line.y = element_line(color="black", linewidth = 0.25),
+      axis.title = element_text(size = 9),
+      axis.text = element_text(colour="black", size=8),
+      legend.key=element_rect(colour=NA, fill =NA),
+      panel.grid = element_blank(),   
+      plot.background = element_rect(fill = NA, colour = NA),
+      panel.border = element_rect(fill = NA, colour = NA),
+      panel.background = element_rect(fill = "white", colour = "black"), 
+      strip.background = element_rect(fill = "white"),
+      strip.text = element_text(size = 9)
+      
+    )
+}
+theme_set(theme_new())
+
+set_flextable_defaults(
+  font.family="Times", 
+  font.size=12,
+  line_spacing=1,
+  padding.bottom=1,
+  padding.top=1,
+  text.align='center')
+```
+
+# Overview
+
+# Methods
+
+## Study area
+
+## Data
+
+### Phenology information
+
+#### Leaf color change
+
+1.  Early color change
+2.  50% Color change
+3.  All leaves changed color
+
+#### Leaf dropping
+
+1.  Early dropping
+2.  50% leaf drop
+3.  All leaves dropped
+
+### Tree size
+
+### Climate data
+
+### PRISM
+
+To characterize the climate conditions for each tree, we also obtained monthly precipitation totals, minimum temperatures, and maximum temperature 30-year normals from PRISM [@prismclimategroup2021Monthly30yearClimate] using the *prism* package [@prism].
+
+```{r DL_PRISM}
+### This chunk of code downloads gridded PRISM data for CONUS. ###
+dir.create(here("Data", "Spatial"))
+dir.create(here("Data", "Spatial", "PRISM"), showWarnings = FALSE) # Create directory to hold data
+prism_set_dl_dir(here("Data", "Spatial", "PRISM")) # tell program to download PRISM data to the directory we just created
+  
+# download climate normals
+get_prism_normals("ppt", "800m", annual = TRUE, keepZip = FALSE) # annual precipitation
+get_prism_normals("tmin", "800m", mon=1, keepZip = FALSE) # minimum temperature in January
+get_prism_normals("tmax", "800m", mon=7, keepZip = FALSE) # maximum temperature in July
+```
+
+```{r linkBudburstwPrism}
+
+######### This code assigns the climate data to each unique location ###########
+
+### Read in data from budburst and create spatial object with latitude and longitude for each location id
+budburst.sf <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
+  # grab only location id, longitude, and latitude columns
+  select(location_id,administrative_area_level_1, longitude, latitude) %>% 
+  # remove duplicates
+  unique() %>%
+  # create spatial object
+  st_as_sf(coords = c("longitude", "latitude"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+### Read in prism data
+prism_set_dl_dir(here("Data", "Spatial", "PRISM")) # tell computer where PRISM data is stored
+
+#### ANNUAL PPT ####
+ppt.normal <- prism_archive_subset("ppt", "annual normals", resolution="800m") %>% # set what PRISM data we want to look at
+  pd_to_file() %>% # get path
+  rast() # read in data 
+names(ppt.normal) <- "PPT"
+
+#### JANUARY TMIN ####
+tmin.normal <- prism_archive_subset("tmin", "monthly normals", mon=1, resolution="800m") %>% # set what PRISM data we want to look at
+  pd_to_file() %>% # get path
+  rast() # read in data 
+names(tmin.normal) <- "TMIN01"
+
+#### JULY TMAX ####
+tmax.normal <- prism_archive_subset("tmax",  "monthly normals", mon=7, resolution="800m") %>% # set what PRISM data we want to look at
+  pd_to_file() %>% # get path
+  rast() # read in data 
+names(tmax.normal) <- "TMAX07"
+
+### Overlay budburst observations and extract climate normals
+budburst.sf <- extract(ppt.normal,budburst.sf, bind=T) # PPT
+budburst.sf <- extract(tmin.normal,budburst.sf, bind=T) # TMIN
+budburst.sf <- extract(tmax.normal,budburst.sf, bind=T) # TMAX
+budburst.climate <- budburst.sf %>% as.data.frame()
+```
+
+## Data preparation
+
+```{r importCleanData}
+
+### FIELD DATA ###
+
+#---- Read in excel file that links location_id field from Budburst with the Locations assigned in the field ----#
+### Fort Collins ###
+FC <- read_excel(here("Data", "Budburst-FortCollins-Beckett.xlsx")) # note I added the column name "Location" to column Z
+
+### Longmont ###
+Longmont <- read_excel(here("Data", "Budburst-Longmont-Beckett.xlsx")) # note I added the column name "Location" to column Z
+### Clean this dataframe 
+#### remove HOME location which is only this the datasheet once
+Longmont <- Longmont %>% filter(!Location=="HOME") # is this same tree as "Home"? They have different location ids
+#### fix formatting b/c location is listed as "Stacy’s Tree" in the DBH data but "Stacy's Tree" in this spreadsheet
+Longmont <- Longmont %>% mutate(Location = gsub("'", "’", Location)) 
+
+# Create data frame with information linking budburst location_ids, Location, and Tree numbers
+## First pull out location_id and Locations assigned in the field
+
+### Fort Collins ####
+Tree.key.FC <- FC %>% 
+  dplyr::select(location_i, Location) %>% # grab only location_i column and Location column
+  na.omit() %>% # remove missing values / cells with out values
+  mutate(City="Fort Collins")# add column with city
+
+### Longmont ###
+Tree.key.Longmont <- Longmont %>% 
+  dplyr::select(location_i, Location) %>% # grab only location_i column and Location column
+  na.omit() %>% # remove missing values / cells with out values
+  mutate(City="Longmont")# add column with city
+
+# Fort Collins and Longmont keys
+Tree.key <- bind_rows(Tree.key.FC, Tree.key.Longmont)  # combine two dataframes
+
+#---- Read in DBH data ----#
+# note this excel file had some permissions on it that only let me visualize the data in excel. I copied and pasted the data into a new excel file and tried to keep all of the formatting the same but some things may have changed slightly
+
+### Fort Collins ###
+DBH.FC <- read_excel(here("Data", "DBH-Crown Excel.xlsx"), sheet="Fort Collins - Fort Collins", skip=2) %>% 
+  # add column with name City and populate with Fort Collins
+  mutate(City="Fort Collins")
+
+### Longmont ###
+DBH.Longmont <- read_excel(here("Data", "DBH-Crown Excel.xlsx"), sheet="Longmont - Longmont", skip=2) %>% 
+  # add column with name City and populate with Longmont
+  mutate(City="Longmont")
+
+### Create data frame with information linking tree numbers from field data with Location ids ###
+### Fort Collins ###
+Tree.key2.FC <- DBH.FC %>% 
+  select(Tree, Location) %>% 
+  # add column with name City and populate with Fort Collins
+  mutate(City="Fort Collins")
+
+### Longmont ###
+Tree.key2.Longmont <- DBH.Longmont %>% 
+  select(Tree, Location) %>% 
+  # add column with name City and populate with Longmont
+  mutate(City="Longmont")
+
+# Fort Collins and Longmont keys
+Tree.key2 <- bind_rows(Tree.key2.FC, Tree.key2.Longmont) 
+
+#---- Combine Tree, Location, and location_id information ----#
+Tree.key <- full_join(Tree.key2, Tree.key, by=c("City", "Location"))
+
+#---- Add location id to DBH data ----#
+DBH.dat <- bind_rows(DBH.FC, DBH.Longmont) # combine Fort Collins and Longmont data into one dataframe
+DBH.dat <- left_join(DBH.dat, Tree.key, by=c("City", "Location", "Tree"))  # Add location id
+colnames(DBH.dat) <- c("Tree", "DBH", "Canopy1", "Canopy2", "Size", "Location", "City", "location_id") # rename columns so they are easier to worth with in R
+
+### BUDBURST DATA ###
+# read in budburst observation csv file
+budburst <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
+  # convert observation_date to date object 
+  mutate(date=as.Date(observation_date, format="%m/%d/%Y")) %>% 
+  # pull year and day of year (doy) into separate columns
+  mutate(year =lubridate::year(date), doy=lubridate::yday(date)) 
+```
+
+## Analyses
+
+### Were small trees more likely to drop their leaves earlier?
+
+```{r Q1, fig.height=3}
+#---- for each tree determine the first date when 50% of leaves had fallen ---#
+budburst.sub.drop50 <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "50% Leaf Drop") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(drop50=min(doy))
+
+#---- for each tree determine the first date when all leaves day had dropped ---#
+budburst.sub.dropall <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "All leaves dropped") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(dropall=min(doy))
+  
+#---- combine data 50% and all leaves dropped data  ---#
+dat.drop <- left_join(budburst.sub.dropall, budburst.sub.drop50, by="location_id")
+
+#---- combine Autumn Leaves Dropping data with DBH  ---#
+dat.drop.FC <- left_join(DBH.dat, dat.drop, by="location_id")  
+
+# Create scatter plot of dropall by DBH
+p1 <- ggplot(dat.drop.FC, aes(x=DBH, y=drop50))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("Day of year where >50% of leaves dropped")
+p2 <-ggplot(dat.drop.FC, aes(x=DBH, y=dropall))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("Day of year where all leaves dropped")
+p1 +p2+plot_annotation(tag_levels="A")
+```
+
+### Did trees in Fort Collins drop their leaves earlier?
+
+```{r Q2, fig.height=3}
+# Create boxplot of dropall by city
+p1 <- ggplot(dat.drop.FC, aes(x=City, y=drop50))+geom_boxplot()+xlab("City")+ylab("First day of year where >50% of leaves dropped")
+p2 <-ggplot(dat.drop.FC, aes(x=City, y=dropall))+geom_boxplot()+xlab("City")+ylab("Day of year where all leaves dropped")
+p1 +p2+plot_annotation(tag_levels="A")
+```
+
+### Did trees from cooler climates drop their leaves earlier?
+
+```{r Q3, fig.height=3}
+dat.drop.climate <- left_join(dat.drop, budburst.climate, by="location_id") %>% 
+  # pull out just data from Colorado
+  filter(administrative_area_level_1=="CO") %>% 
+  # pull only dates in Sep to Dec
+  filter(drop50>243 & dropall>243)
+
+p1 <-dat.drop.climate %>% 
+  select(TMIN01, drop50) %>% #
+  na.omit %>% # remove na values
+  # plot
+  ggplot( aes(x=TMIN01, y=drop50))+geom_point()+geom_smooth(method="lm")+xlab("Mean minimum temperature in January")+ylab("First day of year where >50% of leaves dropped")
+p2 <- dat.drop.climate %>% 
+  select(TMIN01, dropall) %>% #
+  na.omit %>% # remove na values
+  # plot
+  ggplot( aes(x=TMIN01, y=dropall))+geom_point()+geom_smooth(method="lm")+xlab("Mean minimum temperature in January")+ylab("Day of year where all leaves dropped")
+
+p1 +p2+plot_annotation(tag_levels="A")
+```
+
+# References
+
+::: {#refs}
+:::
