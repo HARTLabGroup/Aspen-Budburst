@@ -1,0 +1,22 @@
+"","Tree","DBH","Canopy1","Canopy2","Size","Location","City","location_id","dropall","drop50"
+"1",1,8.1,3.5,4.5,"tall/skinny","Mountain/Sherwood","Fort Collins",75074,310,304
+"2",2,3.7,2.5,2.3,"tall/skinny","Mountain Ave","Fort Collins",75076,310,304
+"3",3,4.3,2,2,"tall/skinny","Loomis","Fort Collins",75085,324,304
+"4",4,4.3,3.1,4.77,"tall/skinny","Trump House on Olive/Grant","Fort Collins",75084,310,297
+"5",5,7.18,4.9,4.65,"tall/skinny","S Magnolia/Washington","Fort Collins",75082,317,304
+"6",6,5.7,5.2,4.1,"tall/skinny","Magnolia/Washington","Fort Collins",75081,304,297
+"7",7,5.57,4.54,5.52,"short/small","W Magnolia","Fort Collins",75080,317,297
+"8",8,2.84,5.5,5.4,"tall/skinny","Red/Green House Across from Park","Fort Collins",75263,324,317
+"9",9,4.8,4.8,4.1,"tall/skinny","Red Door House","Fort Collins",75077,304,297
+"10",10,7.5,5,4.5,"tall/skinny","$2.3 mil House","Fort Collins",75078,317,297
+"11",1,9.3,6.37,7.16,"tall/big","Home","Longmont",75032,NA,NA
+"12",2,2,2.38,2.47,"Small","Stacy’s Tree","Longmont",NA,NA,NA
+"13",3,9.1,5.3,4.63,"tall/big","Northwestern Corner","Longmont",75017,NA,NA
+"14",4,8.4,4.57,3.35,"Tall/big","Flag House","Longmont",75019,315,308
+"15",5,5.6,5.3,3.35,"tall/big","LEE","Longmont",75021,322,315
+"16",6,4.5,2.47,3.35,"tall/skinny","Vorhaus Trees","Longmont",75023,NA,NA
+"17",7,5,2.44,3.96,"tall/big","Pumpkin Colored House","Longmont",75025,NA,NA
+"18",8,4,2.23,1.52,"small","McIntosh Ovaries","Longmont",75027,322,315
+"19",9,2.8,2.8,2.71,"small","McIntosh Boat Launch","Longmont",75029,NA,NA
+"20",10,5,4.36,3.35,"tall/big","Harvard","Longmont",75031,NA,NA
+"21",NA,NA,NA,NA,NA,NA,NA,75015,308,295
