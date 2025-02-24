@@ -16,7 +16,7 @@ citationcolor: blue
 csl: "`r here:::here('ecology.csl')`"
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=F}
 
 ### This chunk of code sets up R to 
 
@@ -25,7 +25,7 @@ options(repos = c(CRAN = "http://cran.rstudio.com"))
 options(timeout=60*30) #timeout downloads that last longer than 30 minutes
 
 knitr::opts_chunk$set(
-  echo = FALSE,
+  echo = T,
 	message = FALSE,
 	warning = FALSE,
 	progress = FALSE,
@@ -121,22 +121,166 @@ prism_set_dl_dir(here("Data", "Spatial", "PRISM")) # tell program to download PR
   
 # download climate normals
 get_prism_normals("ppt", "800m", annual = TRUE, keepZip = FALSE) # annual precipitation
+get_prism_normals("tmean", "800m", annual = TRUE, keepZip = FALSE) # annual average temperature
 get_prism_normals("tmin", "800m", mon=1, keepZip = FALSE) # minimum temperature in January
-get_prism_normals("tmax", "800m", mon=7, keepZip = FALSE) # maximum temperature in July
+get_prism_normals("tmax", "800m", mon=7, keepZip = FALSE) # maximum temperature in Jul
 ```
 
-```{r linkBudburstwPrism}
+## Data preparation
+
+```{r importCleanData}
+### FIELD DATA ###
+#---- Read in excel file that links location_id field from Budburst with the Locations assigned in the field ----#
+field.data <- read_xlsx(here("Data", "FieldData.xlsx"), sheet=1)
+```
+
+```{r}
+### BUDBURST DATA ###
+# read in budburst observation csv file
+budburst <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
+  # convert observation_date to date object 
+  mutate(date=as.Date(observation_date, format="%m/%d/%Y")) %>% 
+  # pull year and day of year (doy) into separate columns
+  mutate(year =lubridate::year(date), doy=lubridate::yday(date)) 
+```
+
+```{r}
+#---- for each tree determine the first day---#
+budburst.sub.firstdate <- budburst %>% 
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(first.doy=min(doy))
+
+#---- for each tree determine the last day of observation---#
+budburst.sub.lastdate <- budburst %>% 
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(last.doy=max(doy))
+
+#### LEAF COLOR CHANGE ####
+
+#---- for each tree determine the last date when None is reported---#
+budburst.sub.colornone <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaf Color Change")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "None") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(color.none=max(doy))
+
+#---- for each tree determine the first date when early color change was observed ---#
+budburst.sub.colore <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaf Color Change")) %>% 
+  # limit dataset to just observations of 50% color change
+  filter(phenophase_title == "Early color change") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(color.early=min(doy))
+
+#---- for each tree determine the first date when 50% of leaves had changed color ---#
+budburst.sub.color50 <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaf Color Change")) %>% 
+  # limit dataset to just observations of 50% Color changep
+  filter(phenophase_title == "50% Color change") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(color.50=min(doy))
+
+#---- for each tree determine the first date when all leaves had changed coloro ---#
+budburst.sub.colorall <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf color
+  filter(phenophase_plant_structure %in% c("Autumn Leaf Color Change")) %>% 
+  # limit dataset to just observations of All leaves changed color
+  filter(phenophase_title == "All leaves changed color") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(color.all=min(doy))
+
+#### LEAF DROP ####
+
+#---- for each tree determine the last date when None is reported---#
+budburst.sub.dropnone <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf drop
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "None") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(drop.none=max(doy))
+
+#---- for each tree determine the first date when "Early dropping" is reported ---#
+budburst.sub.drope <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf drop
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "Early dropping") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(drop.early=min(doy))
+
+#---- for each tree determine the first date when 50% of leaves had fallen ---#
+budburst.sub.drop50 <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf drop
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of 50% Leaf Drop
+  filter(phenophase_title == "50% Leaf Drop") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(drop.50=min(doy))
+
+#---- for each tree determine the first date when all leaves day had dropped ---#
+budburst.sub.dropall <- budburst %>% 
+  # limit dataset to just fall phenophase data describing leaf drop
+  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
+  # limit dataset to just observations of All Leaf Drop
+  filter(phenophase_title == "All leaves dropped") %>% 
+  # group by location id  
+  group_by(location_id) %>% 
+  # for each location id calculate the minimum day
+  summarize(drop.all=min(doy))
+  
+#---- combine data ---#
+dat.drop <- full_join(budburst.sub.firstdate, budburst.sub.lastdate, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.dropnone, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.drope, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.drop50, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.dropall,  by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.colornone, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.colore, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.color50, by="location_id")
+dat.drop <- full_join(dat.drop, budburst.sub.colorall,  by="location_id")
+
+#---- combine Autumn Leaves Dropping data with DBH  ---#
+dat.drop.field <- left_join(field.data, dat.drop, by="location_id") %>% group_by(City, Location, Tree) %>% summarise(Latitude= mean(Latitude, na.rm=T), Longitude=mean(Longitude, na.rm=T), first.doy=min(first.doy, na.rm=T), last.doy=max(last.doy, na.rm=T), drop.none=max(drop.none, na.rm=T), drop.early=min(drop.early, na.rm=T), drop.50=min(drop.50, na.rm=T), drop.all=min(drop.all, na.rm=T), color.none=max(color.none, na.rm=T), color.early=min(color.early, na.rm=T), color.50=min(color.50, na.rm=T), color.all=min(color.all, na.rm=T))
+
+dat.drop.field <- dat.drop.field %>% mutate_if(is.numeric, ~replace(., is.infinite(.), NA))
+field.dat.sub <- field.data %>% select(City:Location) %>% select(-Name, -ID) %>% unique()
+dat.drop.field <- left_join(field.dat.sub, dat.drop.field, by=c("City", "Location", "Tree"))
+
+```
+
+```{r combineWithClimate}
 
 ######### This code assigns the climate data to each unique location ###########
 
 ### Read in data from budburst and create spatial object with latitude and longitude for each location id
 budburst.sf <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
   # grab only location id, longitude, and latitude columns
-  select(location_id,administrative_area_level_1, longitude, latitude) %>% 
+  select(location_id, site_species_id, administrative_area_level_1, locality, longitude, latitude) %>% 
   # remove duplicates
   unique() %>%
   # create spatial object
-  st_as_sf(coords = c("longitude", "latitude"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+  st_as_sf(coords = c("longitude", "latitude"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs", remove=F)
 
 ### Read in prism data
 prism_set_dl_dir(here("Data", "Spatial", "PRISM")) # tell computer where PRISM data is stored
@@ -146,6 +290,12 @@ ppt.normal <- prism_archive_subset("ppt", "annual normals", resolution="800m") %
   pd_to_file() %>% # get path
   rast() # read in data 
 names(ppt.normal) <- "PPT"
+
+#### ANNUAL TMEAN ####
+tmean.normal <- prism_archive_subset("tmean", "annual normals", resolution="800m") %>% # set what PRISM data we want to look at
+  pd_to_file() %>% # get path
+  rast() # read in data 
+names(tmean.normal) <- "TMEAN"
 
 #### JANUARY TMIN ####
 tmin.normal <- prism_archive_subset("tmin", "monthly normals", mon=1, resolution="800m") %>% # set what PRISM data we want to look at
@@ -161,162 +311,69 @@ names(tmax.normal) <- "TMAX07"
 
 ### Overlay budburst observations and extract climate normals
 budburst.sf <- extract(ppt.normal,budburst.sf, bind=T) # PPT
+budburst.sf <- extract(tmean.normal,budburst.sf, bind=T) # TMEAN
 budburst.sf <- extract(tmin.normal,budburst.sf, bind=T) # TMIN
 budburst.sf <- extract(tmax.normal,budburst.sf, bind=T) # TMAX
 budburst.climate <- budburst.sf %>% as.data.frame()
-```
 
-## Data preparation
+dat.drop.climate <- left_join(dat.drop, budburst.climate, by="location_id")  %>% mutate(FortCollins=ifelse(locality=="Fort Collins", "yes", "no"))
+write.csv(dat.drop.climate, here("Data", "Processed", "autumnleafdropXclimate.csv"), row.names=F)
 
-```{r importCleanData}
+### 
+dat.drop.field <- dat.drop.field %>% st_as_sf(coords = c("Longitude", "Latitude"), crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs", remove=F)
 
-### FIELD DATA ###
+dat.drop.field.climate <- extract(ppt.normal,dat.drop.field, bind=T) # PPT
+dat.drop.field.climate <- extract(tmean.normal,dat.drop.field.climate, bind=T) # TMEAN
+dat.drop.field.climate <- extract(tmin.normal,dat.drop.field.climate, bind=T) # TMIN
+dat.drop.field.climate <- extract(tmax.normal,dat.drop.field.climate, bind=T) # TMAX
+dat.drop.field.climate <- dat.drop.field.climate %>% as.data.frame()
 
-#---- Read in excel file that links location_id field from Budburst with the Locations assigned in the field ----#
-### Fort Collins ###
-FC <- read_excel(here("Data", "Budburst-FortCollins-Beckett.xlsx")) # note I added the column name "Location" to column Z
+write.csv(dat.drop.field.climate, here("Data", "Processed", "autumnleafdropXfieldXclimate.csv"), row.names=F)
 
-### Longmont ###
-Longmont <- read_excel(here("Data", "Budburst-Longmont-Beckett.xlsx")) # note I added the column name "Location" to column Z
-### Clean this dataframe 
-#### remove HOME location which is only this the datasheet once
-Longmont <- Longmont %>% filter(!Location=="HOME") # is this same tree as "Home"? They have different location ids
-#### fix formatting b/c location is listed as "Stacy’s Tree" in the DBH data but "Stacy's Tree" in this spreadsheet
-Longmont <- Longmont %>% mutate(Location = gsub("'", "’", Location)) 
-
-# Create data frame with information linking budburst location_ids, Location, and Tree numbers
-## First pull out location_id and Locations assigned in the field
-
-### Fort Collins ####
-Tree.key.FC <- FC %>% 
-  dplyr::select(location_i, Location) %>% # grab only location_i column and Location column
-  na.omit() %>% # remove missing values / cells with out values
-  mutate(City="Fort Collins")# add column with city
-
-### Longmont ###
-Tree.key.Longmont <- Longmont %>% 
-  dplyr::select(location_i, Location) %>% # grab only location_i column and Location column
-  na.omit() %>% # remove missing values / cells with out values
-  mutate(City="Longmont")# add column with city
-
-# Fort Collins and Longmont keys
-Tree.key <- bind_rows(Tree.key.FC, Tree.key.Longmont)  # combine two dataframes
-
-#---- Read in DBH data ----#
-# note this excel file had some permissions on it that only let me visualize the data in excel. I copied and pasted the data into a new excel file and tried to keep all of the formatting the same but some things may have changed slightly
-
-### Fort Collins ###
-DBH.FC <- read_excel(here("Data", "DBH-Crown Excel.xlsx"), sheet="Fort Collins - Fort Collins", skip=2) %>% 
-  # add column with name City and populate with Fort Collins
-  mutate(City="Fort Collins")
-
-### Longmont ###
-DBH.Longmont <- read_excel(here("Data", "DBH-Crown Excel.xlsx"), sheet="Longmont - Longmont", skip=2) %>% 
-  # add column with name City and populate with Longmont
-  mutate(City="Longmont")
-
-### Create data frame with information linking tree numbers from field data with Location ids ###
-### Fort Collins ###
-Tree.key2.FC <- DBH.FC %>% 
-  select(Tree, Location) %>% 
-  # add column with name City and populate with Fort Collins
-  mutate(City="Fort Collins")
-
-### Longmont ###
-Tree.key2.Longmont <- DBH.Longmont %>% 
-  select(Tree, Location) %>% 
-  # add column with name City and populate with Longmont
-  mutate(City="Longmont")
-
-# Fort Collins and Longmont keys
-Tree.key2 <- bind_rows(Tree.key2.FC, Tree.key2.Longmont) 
-
-#---- Combine Tree, Location, and location_id information ----#
-Tree.key <- full_join(Tree.key2, Tree.key, by=c("City", "Location"))
-
-#---- Add location id to DBH data ----#
-DBH.dat <- bind_rows(DBH.FC, DBH.Longmont) # combine Fort Collins and Longmont data into one dataframe
-DBH.dat <- left_join(DBH.dat, Tree.key, by=c("City", "Location", "Tree"))  # Add location id
-colnames(DBH.dat) <- c("Tree", "DBH", "Canopy1", "Canopy2", "Size", "Location", "City", "location_id") # rename columns so they are easier to worth with in R
-
-### BUDBURST DATA ###
-# read in budburst observation csv file
-budburst <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
-  # convert observation_date to date object 
-  mutate(date=as.Date(observation_date, format="%m/%d/%Y")) %>% 
-  # pull year and day of year (doy) into separate columns
-  mutate(year =lubridate::year(date), doy=lubridate::yday(date)) 
 ```
 
 ## Analyses
 
 ### Were small trees more likely to drop their leaves earlier?
 
-```{r Q1, fig.height=3}
-#---- for each tree determine the first date when 50% of leaves had fallen ---#
-budburst.sub.drop50 <- budburst %>% 
-  # limit dataset to just fall phenophase data describing leaf color
-  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
-  # limit dataset to just observations of 50% Leaf Drop
-  filter(phenophase_title == "50% Leaf Drop") %>% 
-  # group by location id  
-  group_by(location_id) %>% 
-  # for each location id calculate the minimum day
-  summarize(drop50=min(doy))
-
-#---- for each tree determine the first date when all leaves day had dropped ---#
-budburst.sub.dropall <- budburst %>% 
-  # limit dataset to just fall phenophase data describing leaf color
-  filter(phenophase_plant_structure %in% c("Autumn Leaves Dropping")) %>% 
-  # limit dataset to just observations of 50% Leaf Drop
-  filter(phenophase_title == "All leaves dropped") %>% 
-  # group by location id  
-  group_by(location_id) %>% 
-  # for each location id calculate the minimum day
-  summarize(dropall=min(doy))
-  
-#---- combine data 50% and all leaves dropped data  ---#
-dat.drop <- left_join(budburst.sub.dropall, budburst.sub.drop50, by="location_id")
-
-#---- combine Autumn Leaves Dropping data with DBH  ---#
-dat.drop.FC <- left_join(DBH.dat, dat.drop, by="location_id")  
-
+```{r}
 # Create scatter plot of dropall by DBH
-p1 <- ggplot(dat.drop.FC, aes(x=DBH, y=drop50))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("Day of year where >50% of leaves dropped")
-p2 <-ggplot(dat.drop.FC, aes(x=DBH, y=dropall))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("Day of year where all leaves dropped")
-p1 +p2+plot_annotation(tag_levels="A")
+p1 <- ggplot(dat.drop.field , aes(x=DBH, y=drop.50))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("First day of year\nwhere >50% of leaves dropped")
+p2 <-ggplot(dat.drop.field , aes(x=DBH, y=drop.all))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("First day of year\nwhere all leaves dropped")
+p1 +p2+plot_annotation(tag_levels="A")+ plot_layout(guides = "collect") & theme(legend.position = 'bottom')
+
 ```
 
 ### Did trees in Fort Collins drop their leaves earlier?
 
 ```{r Q2, fig.height=3}
 # Create boxplot of dropall by city
-p1 <- ggplot(dat.drop.FC, aes(x=City, y=drop50))+geom_boxplot()+xlab("City")+ylab("First day of year where >50% of leaves dropped")
-p2 <-ggplot(dat.drop.FC, aes(x=City, y=dropall))+geom_boxplot()+xlab("City")+ylab("Day of year where all leaves dropped")
+p1 <- ggplot(dat.drop.field, aes(x=City, y=drop.50))+geom_boxplot()+xlab("City")+ylab("First day of year\nwhere >50% of leaves dropped")
+p2 <-ggplot(dat.drop.field, aes(x=City, y=drop.all))+geom_boxplot()+xlab("City")+ylab("First day of year\nwhere all leaves dropped")
 p1 +p2+plot_annotation(tag_levels="A")
 ```
 
 ### Did trees from cooler climates drop their leaves earlier?
 
 ```{r Q3, fig.height=3}
-dat.drop.climate <- left_join(dat.drop, budburst.climate, by="location_id") %>% 
+dat.drop.climate <-dat.drop.climate %>% 
   # pull out just data from Colorado
-  filter(administrative_area_level_1=="CO") %>% 
+  #filter(administrative_area_level_1=="CO") %>% 
   # pull only dates in Sep to Dec
-  filter(drop50>243 & dropall>243)
+  filter(drop.early > 243 & drop.50>243 & drop.all>243)
 
 p1 <-dat.drop.climate %>% 
-  select(TMIN01, drop50) %>% #
+  select(TMIN01, drop.50, locality) %>% #
   na.omit %>% # remove na values
   # plot
-  ggplot( aes(x=TMIN01, y=drop50))+geom_point()+geom_smooth(method="lm")+xlab("Mean minimum temperature in January")+ylab("First day of year where >50% of leaves dropped")
+  ggplot( aes(x=TMIN01, y=drop.50))+geom_point(aes(col=locality))+geom_smooth(method="lm")+xlab("Mean minimum temperature\nin January")+ylab("First day of year\nwhere >50% of leaves dropped")
 p2 <- dat.drop.climate %>% 
-  select(TMIN01, dropall) %>% #
+  select(TMIN01, drop.all, locality) %>% #
   na.omit %>% # remove na values
   # plot
-  ggplot( aes(x=TMIN01, y=dropall))+geom_point()+geom_smooth(method="lm")+xlab("Mean minimum temperature in January")+ylab("Day of year where all leaves dropped")
+  ggplot( aes(x=TMIN01, y=drop.all))+geom_point(aes(col=locality))+geom_smooth(method="lm")+xlab("Mean minimum temperature\n in January")+ylab("Day of year where\nall leaves dropped")
 
-p1 +p2+plot_annotation(tag_levels="A")
+p1 +p2+plot_annotation(tag_levels="A")+ plot_layout(guides = "collect")& theme(legend.position = 'bottom')
 ```
 
 # References
