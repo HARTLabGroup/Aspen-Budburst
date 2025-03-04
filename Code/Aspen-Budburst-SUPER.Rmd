@@ -275,8 +275,12 @@ dat.drop.field <- left_join(field.dat.sub, dat.drop.field, by=c("City", "Locatio
 
 ### Read in data from budburst and create spatial object with latitude and longitude for each location id
 budburst.sf <- read.csv(here("Data", "budburst_observations_1739214151.csv")) %>% 
-  # grab only location id, longitude, and latitude columns
-  select(location_id, site_species_id, administrative_area_level_1, locality, longitude, latitude) %>% 
+  # convert observation_date to date object 
+  mutate(date=as.Date(observation_date, format="%m/%d/%Y")) %>% 
+  # pull year and day of year (doy) into separate columns
+  mutate(year =lubridate::year(date), doy=lubridate::yday(date)) %>% 
+  # grab certain columns
+  select(location_id, site_species_id, administrative_area_level_1, locality, longitude, latitude, year) %>% 
   # remove duplicates
   unique() %>%
   # create spatial object
@@ -336,7 +340,7 @@ write.csv(dat.drop.field.climate, here("Data", "Processed", "autumnleafdropXfiel
 
 ### Were small trees more likely to drop their leaves earlier?
 
-```{r}
+```{r, fig.height=2.5, fig.width=5}
 # Create scatter plot of dropall by DBH
 p1 <- ggplot(dat.drop.field , aes(x=DBH, y=drop.50))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("First day of year\nwhere >50% of leaves dropped")
 p2 <-ggplot(dat.drop.field , aes(x=DBH, y=drop.all))+geom_point()+geom_smooth(method='lm')+xlab("DBH (cm)")+ylab("First day of year\nwhere all leaves dropped")
@@ -346,7 +350,7 @@ p1 +p2+plot_annotation(tag_levels="A")+ plot_layout(guides = "collect") & theme(
 
 ### Did trees in Fort Collins drop their leaves earlier?
 
-```{r Q2, fig.height=3}
+```{r Q2, fig.height=2.5, fig.width=5}
 # Create boxplot of dropall by city
 p1 <- ggplot(dat.drop.field, aes(x=City, y=drop.50))+geom_boxplot()+xlab("City")+ylab("First day of year\nwhere >50% of leaves dropped")
 p2 <-ggplot(dat.drop.field, aes(x=City, y=drop.all))+geom_boxplot()+xlab("City")+ylab("First day of year\nwhere all leaves dropped")
@@ -356,22 +360,25 @@ p1 +p2+plot_annotation(tag_levels="A")
 ### Did trees from cooler climates drop their leaves earlier?
 
 ```{r Q3, fig.height=3}
-dat.drop.climate <-dat.drop.climate %>% 
+dat.drop.climate <- dat.drop.climate %>% 
   # pull out just data from Colorado
-  #filter(administrative_area_level_1=="CO") %>% 
-  # pull only dates in Sep to Dec
-  filter(drop.early > 243 & drop.50>243 & drop.all>243)
+  filter(administrative_area_level_1 %in% c("Colorado", "CO")) %>% 
+  mutate(year=factor(year))
 
 p1 <-dat.drop.climate %>% 
-  select(TMIN01, drop.50, locality) %>% #
+  select(TMIN01, drop.50, FortCollins, year) %>%
+  # pull only dates in Sep to Dec
+  filter(drop.50>243) %>% 
   na.omit %>% # remove na values
   # plot
-  ggplot( aes(x=TMIN01, y=drop.50))+geom_point(aes(col=locality))+geom_smooth(method="lm")+xlab("Mean minimum temperature\nin January")+ylab("First day of year\nwhere >50% of leaves dropped")
+  ggplot( aes(x=TMIN01, y=drop.50))+geom_point(aes(col=FortCollins))+geom_smooth(method="lm")+xlab("Mean minimum temperature\nin January")+ylab("First day of year\nwhere >50% of leaves dropped")
 p2 <- dat.drop.climate %>% 
-  select(TMIN01, drop.all, locality) %>% #
+  select(TMIN01, drop.all, FortCollins, year) %>%
+  # pull only dates in Sep to Dec
+  filter(drop.all>243) %>% #
   na.omit %>% # remove na values
   # plot
-  ggplot( aes(x=TMIN01, y=drop.all))+geom_point(aes(col=locality))+geom_smooth(method="lm")+xlab("Mean minimum temperature\n in January")+ylab("Day of year where\nall leaves dropped")
+  ggplot( aes(x=TMIN01, y=drop.all))+geom_point(aes(col=FortCollins))+geom_smooth(method="lm")+xlab("Mean minimum temperature\n in January")+ylab("Day of year where\nall leaves dropped")
 
 p1 +p2+plot_annotation(tag_levels="A")+ plot_layout(guides = "collect")& theme(legend.position = 'bottom')
 ```
